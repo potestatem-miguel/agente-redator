@@ -30,7 +30,10 @@ function Get-OptionalEnv([string]$Name, [string]$Default = "") {
 }
 
 function Convert-TextToJsonObject {
-  param([string]$Text)
+  param(
+    [string]$Text,
+    [string]$Provider = ""
+  )
 
   $trimmed = [string]$Text
   if ([string]::IsNullOrWhiteSpace($trimmed)) {
@@ -67,7 +70,7 @@ Regras:
 Conteudo:
 $candidate
 "@
-        return (Invoke-LlmJson -SystemPrompt "Voce corrige JSON invalido e retorna apenas JSON valido." -UserPrompt $repairPrompt -Model "")
+        return (Invoke-LlmJson -SystemPrompt "Voce corrige JSON invalido e retorna apenas JSON valido." -UserPrompt $repairPrompt -Model "" -Provider $Provider)
       }
     }
     throw
@@ -78,10 +81,15 @@ function Invoke-LlmJson {
   param(
     [string]$SystemPrompt,
     [string]$UserPrompt,
-    [string]$Model = ""
+    [string]$Model = "",
+    [string]$Provider = ""
   )
 
-  $provider = (Get-OptionalEnv -Name "LLM_PROVIDER" -Default "anthropic").ToLowerInvariant()
+  $provider = if ([string]::IsNullOrWhiteSpace($Provider)) {
+    (Get-OptionalEnv -Name "LLM_PROVIDER" -Default "anthropic").ToLowerInvariant()
+  } else {
+    $Provider.ToLowerInvariant()
+  }
 
   if ($provider -eq "anthropic") {
     $apiKey = Get-RequiredEnv "ANTHROPIC_API_KEY"
@@ -122,7 +130,7 @@ function Invoke-LlmJson {
       throw
     }
     $text = ((@($response.content) | Where-Object { $_.type -eq "text" } | ForEach-Object { $_.text }) -join "")
-    return (Convert-TextToJsonObject -Text $text)
+    return (Convert-TextToJsonObject -Text $text -Provider $provider)
   }
 
   $apiKey = Get-RequiredEnv "OPENAI_API_KEY"
@@ -376,6 +384,7 @@ function Repair-ArticlePlan {
 
   $repaired = Invoke-LlmJson `
     -SystemPrompt "Voce revisa article_plan.json para manter fidelidade editorial e schema fixo. Retorne apenas JSON valido." `
+    -Provider "anthropic" `
     -UserPrompt @"
 Revise o article_plan abaixo e devolva o mesmo schema, corrigindo apenas o necessario.
 
@@ -471,6 +480,7 @@ Save-Json -Path (Join-Path $OutputDir "01-research-pack.json") -Data $researchPa
 
 $validation = Invoke-LlmJson `
   -SystemPrompt "Voce valida temas editoriais para servidor publico. Responda apenas JSON valido." `
+  -Provider "openai" `
   -UserPrompt @"
 Avalie o tema abaixo para servidor publico e devolva exatamente estas chaves:
 - decision: approved|refine|rejected
@@ -561,6 +571,7 @@ $primaryCourseUrl = Get-FirstCourseUrl -Courses $articlePlan.cursos_relacionados
 $coursesPromptJson = ($articlePlan.cursos_relacionados | ConvertTo-Json -Depth 20 -Compress)
 $distributor = Invoke-LlmJson `
   -SystemPrompt "Voce e um agente de apoio editorial. Divida blocos sem alterar conteudo e retorne apenas JSON valido." `
+  -Provider "openai" `
   -UserPrompt @"
 Voce e um agente de apoio editorial. Sua missao: receber um PLANEJAMENTO DE ARTIGO em JSON e dividir os blocos entre 3 redatores, SEM alterar nada do conteudo.
 
@@ -652,7 +663,7 @@ SAIDA:
 - Retorne APENAS um JSON com a chave "texto 1".
 "@
 
-$writer1 = Invoke-LlmJson -SystemPrompt "Redator 1 de blocos HTML. Retorne apenas JSON valido." -UserPrompt @"
+$writer1 = Invoke-LlmJson -SystemPrompt "Redator 1 de blocos HTML. Retorne apenas JSON valido." -Provider "anthropic" -UserPrompt @"
 $writerPromptHeader
 
 ENTRADA (somente seus blocos, na ordem):
@@ -664,7 +675,7 @@ $writer1 = Repair-TextTree -Value $writer1
 Set-ObjectField -Object $writer1 -Name "writer_role" -Value "redator_1"
 Save-Json -Path (Join-Path $OutputDir "08-writer-redator-1.json") -Data $writer1
 
-$writer2 = Invoke-LlmJson -SystemPrompt "Redator 2 de blocos HTML. Retorne apenas JSON valido." -UserPrompt @"
+$writer2 = Invoke-LlmJson -SystemPrompt "Redator 2 de blocos HTML. Retorne apenas JSON valido." -Provider "anthropic" -UserPrompt @"
 $writerPromptHeader
 
 ENTRADA (somente seus blocos, na ordem):
@@ -676,7 +687,7 @@ $writer2 = Repair-TextTree -Value $writer2
 Set-ObjectField -Object $writer2 -Name "writer_role" -Value "redator_2"
 Save-Json -Path (Join-Path $OutputDir "09-writer-redator-2.json") -Data $writer2
 
-$writer3 = Invoke-LlmJson -SystemPrompt "Redator 3 de blocos HTML. Retorne apenas JSON valido." -UserPrompt @"
+$writer3 = Invoke-LlmJson -SystemPrompt "Redator 3 de blocos HTML. Retorne apenas JSON valido." -Provider "anthropic" -UserPrompt @"
 $writerPromptHeader
 
 ENTRADA (somente seus blocos, na ordem):
@@ -690,6 +701,7 @@ Save-Json -Path (Join-Path $OutputDir "10-writer-redator-3.json") -Data $writer3
 
 $writerFinal = Invoke-LlmJson `
   -SystemPrompt "Voce e um redator brasileiro especialista em SEO, AEO e GEO, com mais de 15 anos de experiencia. Retorne apenas JSON valido." `
+  -Provider "anthropic" `
   -UserPrompt @"
 Voce e um redator brasileiro especialista em SEO, AEO (Answer Engine Optimization) e GEO (Generative Engine Optimization), com mais de 15 anos de experiencia.
 Sua missao e gerar a introducao, a conclusao, classificar a categoria do artigo e construir o FAQ em HTML com base nos conteudos ja escritos pelos redatores.
@@ -796,6 +808,7 @@ Save-Json -Path (Join-Path $OutputDir "11-article-final.json") -Data $articleFin
 
 $imagePackage = Invoke-LlmJson `
   -SystemPrompt "Voce cria pacote textual de imagem para artigo. Responda apenas JSON valido." `
+  -Provider "openai" `
   -UserPrompt @"
 Crie image_package com estas chaves:
 - title
