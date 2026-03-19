@@ -34,7 +34,10 @@ function Get-OptionalEnv([string]$Name, [string]$Default = "") {
 }
 
 function Convert-TextToJsonObject {
-  param([string]$Text)
+  param(
+    [string]$Text,
+    [string]$Provider = ""
+  )
 
   $trimmed = [string]$Text
   if ([string]::IsNullOrWhiteSpace($trimmed)) {
@@ -64,10 +67,15 @@ function Invoke-LlmJson {
   param(
     [string]$SystemPrompt,
     [string]$UserPrompt,
-    [string]$Model = ""
+    [string]$Model = "",
+    [string]$Provider = ""
   )
 
-  $provider = (Get-OptionalEnv -Name "LLM_PROVIDER" -Default "anthropic").ToLowerInvariant()
+  $provider = if ([string]::IsNullOrWhiteSpace($Provider)) {
+    (Get-OptionalEnv -Name "LLM_PROVIDER" -Default "anthropic").ToLowerInvariant()
+  } else {
+    $Provider.ToLowerInvariant()
+  }
 
   if ($provider -eq "anthropic") {
     $apiKey = Get-RequiredEnv "ANTHROPIC_API_KEY"
@@ -98,7 +106,7 @@ function Invoke-LlmJson {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
     $response = Invoke-RestMethod -Method Post -Uri "https://api.anthropic.com/v1/messages" -Headers $headers -Body $bytes -ContentType "application/json; charset=utf-8"
     $text = ((@($response.content) | Where-Object { $_.type -eq "text" } | ForEach-Object { $_.text }) -join "")
-    return (Convert-TextToJsonObject -Text $text)
+    return (Convert-TextToJsonObject -Text $text -Provider $provider)
   }
 
   $apiKey = Get-RequiredEnv "OPENAI_API_KEY"
@@ -129,6 +137,7 @@ $validation = Get-Content $ValidationPath -Raw | ConvertFrom-Json
 
 $result = Invoke-LlmJson `
   -SystemPrompt "Voce gera titulo, slug, palavra_chave final e canonical_topic para artigos SEO. Responda apenas JSON valido." `
+  -Provider "openai" `
   -UserPrompt @"
 Retorne exatamente as chaves:
 - tema_original
