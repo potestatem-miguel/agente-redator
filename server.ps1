@@ -25,10 +25,12 @@ function Write-HttpJsonResponse {
     [int]$StatusCode = 200
   )
 
-  $json = $Payload | ConvertTo-Json -Depth 50
+  $json = $Payload | ConvertTo-Json -Depth 100
   $bodyBytes = [System.Text.Encoding]::UTF8.GetBytes($json)
   $statusText = switch ($StatusCode) {
     200 { "OK" }
+    202 { "Accepted" }
+    400 { "Bad Request" }
     404 { "Not Found" }
     500 { "Internal Server Error" }
     default { "OK" }
@@ -73,7 +75,7 @@ function Convert-ToBoolean {
     "0" { return $false }
     "no" { return $false }
     "nao" { return $false }
-    "não" { return $false }
+    "nÃ£o" { return $false }
     "" { return $false }
     default { throw "Valor invalido para stop_after_planning: '$Value'" }
   }
@@ -131,78 +133,269 @@ function Read-HttpRequest {
   }
 }
 
-function Invoke-OrchestratorRun {
+function Get-WorkspaceRoot {
+  $workspaceRoot = $PSScriptRoot
+  if ([string]::IsNullOrWhiteSpace($workspaceRoot)) {
+    throw "Nao foi possivel resolver o diretorio raiz da aplicacao."
+  }
+  return $workspaceRoot
+}
+
+function Get-JobStoreRoot {
+  $root = Join-Path (Get-WorkspaceRoot) "test-output\jobs"
+  if (-not (Test-Path $root)) {
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
+  }
+  return $root
+}
+
+function Get-JobDirectory {
+  param([Parameter(Mandatory = $true)][string]$JobId)
+  return (Join-Path (Get-JobStoreRoot) $JobId)
+}
+
+function Write-JsonFile {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)]$Payload
+  )
+
+  $dir = Split-Path -Parent $Path
+  if (-not (Test-Path $dir)) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+  }
+
+  ($Payload | ConvertTo-Json -Depth 100) | Set-Content -Path $Path -Encoding UTF8
+}
+
+function Read-JsonFile {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  return (Get-Content -Raw -Encoding UTF8 $Path | ConvertFrom-Json)
+}
+
+function New-JobId {
+  return ([guid]::NewGuid().ToString("N"))
+}
+
+function New-SafeTemaSlug {
+  param([Parameter(Mandatory = $true)][string]$Tema)
+  $safeTema = (($Tema -replace '[^a-zA-Z0-9_-]+', '-') -replace '-{2,}', '-').Trim('-')
+  if ([string]::IsNullOrWhiteSpace($safeTema)) { return "tema" }
+  return $safeTema
+}
+
+function Get-OrchestratorScriptPath {
+  return (Join-Path (Get-WorkspaceRoot) "agents\article-orchestrator\scripts\run_article_orchestrator.ps1")
+}
+
+function Get-OrchestratorOutputDir {
+  param(
+    [Parameter(Mandatory = $true)][string]$Tema,
+    [Parameter(Mandatory = $true)][string]$JobId
+  )
+
+  $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+  $safeTema = New-SafeTemaSlug -Tema $Tema
+  return (Join-Path (Get-WorkspaceRoot) ("test-output\api-{0}-{1}-{2}" -f $stamp, $safeTema, $JobId))
+}
+
+function Get-JobState {
+  param([Parameter(Mandatory = $true)][string]$JobId)
+
+  $jobDir = Get-JobDirectory -JobId $JobId
+  if (-not (Test-Path $jobDir)) {
+    throw "Job nao encontrado."
+  }
+
+  $donePath = Join-Path $jobDir "done.json"
+  if (Test-Path $donePath) { return (Read-JsonFile -Path $donePath) }
+
+  $errorPath = Join-Path $jobDir "error.json"
+  if (Test-Path $errorPath) { return (Read-JsonFile -Path $errorPath) }
+
+  $runningPath = Join-Path $jobDir "running.json"
+  if (Test-Path $runningPath) { return (Read-JsonFile -Path $runningPath) }
+
+  $queuedPath = Join-Path $jobDir "queued.json"
+  if (Test-Path $queuedPath) { return (Read-JsonFile -Path $queuedPath) }
+
+  throw "Estado do job nao encontrado."
+}
+
+function Start-OrchestratorJob {
   param(
     [Parameter(Mandatory = $true)][string]$Tema,
     [bool]$StopAfterPlanning = $false
   )
 
-  $workspaceRoot = $PSScriptRoot
-  if ([string]::IsNullOrWhiteSpace($workspaceRoot)) {
-    throw "Nao foi possivel resolver o diretorio raiz da aplicacao."
-  }
-  $orchestratorScript = Join-Path $workspaceRoot "agents\article-orchestrator\scripts\run_article_orchestrator.ps1"
-  $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-  $safeTema = (($Tema -replace '[^a-zA-Z0-9_-]+', '-') -replace '-{2,}', '-').Trim('-')
-  if ([string]::IsNullOrWhiteSpace($safeTema)) { $safeTema = "tema" }
-  $outputDir = Join-Path $workspaceRoot ("test-output\api-{0}-{1}" -f $stamp, $safeTema)
+  $jobId = New-JobId
+  $jobDir = Get-JobDirectory -JobId $jobId
+  $outputDir = Get-OrchestratorOutputDir -Tema $Tema -JobId $jobId
+  $queuedPath = Join-Path $jobDir "queued.json"
+  $workerScriptPath = Join-Path $jobDir "worker.ps1"
+  $orchestratorScript = Get-OrchestratorScriptPath
+  $powerShellExe = Get-PowerShellExecutable
 
-  $args = @(
+  New-Item -ItemType Directory -Path $jobDir -Force | Out-Null
+  Write-JsonFile -Path $queuedPath -Payload @{
+    ok = $true
+    status = "queued"
+    job_id = $jobId
+    tema = $Tema
+    stop_after_planning = $StopAfterPlanning
+    output_dir = $outputDir
+    created_at = (Get-Date).ToString("s")
+  }
+
+  $temaEscaped = $Tema.Replace("'", "''")
+  $jobDirEscaped = $jobDir.Replace("'", "''")
+  $outputDirEscaped = $outputDir.Replace("'", "''")
+  $orchestratorEscaped = $orchestratorScript.Replace("'", "''")
+  $powerShellEscaped = $powerShellExe.Replace("'", "''")
+  $stopAsText = if ($StopAfterPlanning) { "True" } else { "False" }
+
+  $workerContent = @"
+`$ErrorActionPreference = 'Stop'
+`$Utf8NoBom = New-Object System.Text.UTF8Encoding(`$false)
+[Console]::InputEncoding = `$Utf8NoBom
+[Console]::OutputEncoding = `$Utf8NoBom
+`$OutputEncoding = `$Utf8NoBom
+
+function Write-JobJson {
+  param([string]`$Path, `$Payload)
+  (`$Payload | ConvertTo-Json -Depth 100) | Set-Content -Path `$Path -Encoding UTF8
+}
+
+`$jobDir = '$jobDirEscaped'
+`$runningPath = Join-Path `$jobDir 'running.json'
+`$donePath = Join-Path `$jobDir 'done.json'
+`$errorPath = Join-Path `$jobDir 'error.json'
+`$logPath = Join-Path `$jobDir 'worker.log'
+`$outputDir = '$outputDirEscaped'
+`$tema = '$temaEscaped'
+`$stopAfterPlanning = [System.Convert]::ToBoolean('$stopAsText')
+
+try {
+  Write-JobJson -Path `$runningPath -Payload @{
+    ok = `$true
+    status = 'running'
+    job_id = '$jobId'
+    tema = `$tema
+    stop_after_planning = `$stopAfterPlanning
+    output_dir = `$outputDir
+    started_at = (Get-Date).ToString('s')
+  }
+
+  `$args = @(
+    '-NoProfile',
+    '-ExecutionPolicy', 'Bypass',
+    '-File', '$orchestratorEscaped',
+    '-Tema', `$tema,
+    '-OutputDir', `$outputDir
+  )
+
+  if (`$stopAfterPlanning) {
+    `$args += '-StopAfterPlanning'
+  }
+
+  `$raw = & '$powerShellEscaped' @args 2>&1
+  `$text = ((`$raw | ForEach-Object { `$_.ToString() }) -join [Environment]::NewLine).Trim()
+  if (`$text) {
+    `$text | Set-Content -Path `$logPath -Encoding UTF8
+  }
+
+  if (`$LASTEXITCODE -ne 0) {
+    throw "Falha ao executar o article-orchestrator. Saida: `$text"
+  }
+"@
+
+  $workerContent += @"
+
+  if (`$stopAfterPlanning) {
+    `$payload = @{
+      mode = 'planning'
+      output_dir = `$outputDir
+      research_pack = (Get-Content -Raw -Encoding UTF8 (Join-Path `$outputDir '01-research-pack.json') | ConvertFrom-Json)
+      topic_validation = (Get-Content -Raw -Encoding UTF8 (Join-Path `$outputDir '02-topic-validation.json') | ConvertFrom-Json)
+      approved_topic = (Get-Content -Raw -Encoding UTF8 (Join-Path `$outputDir '03-approved-topic.json') | ConvertFrom-Json)
+      duplicate_check = (Get-Content -Raw -Encoding UTF8 (Join-Path `$outputDir '04-duplicate-check.json') | ConvertFrom-Json)
+      course_match = (Get-Content -Raw -Encoding UTF8 (Join-Path `$outputDir '05-course-match.json') | ConvertFrom-Json)
+      article_plan = (Get-Content -Raw -Encoding UTF8 (Join-Path `$outputDir '06-article-plan.json') | ConvertFrom-Json)
+    }
+  }
+  else {
+    `$payload = @{
+      mode = 'full'
+      output_dir = `$outputDir
+      result = (Get-Content -Raw -Encoding UTF8 (Join-Path `$outputDir '13-publish-package.json') | ConvertFrom-Json)
+    }
+  }
+
+  Write-JobJson -Path `$donePath -Payload @{
+    ok = `$true
+    status = 'completed'
+    job_id = '$jobId'
+    tema = `$tema
+    stop_after_planning = `$stopAfterPlanning
+    output_dir = `$outputDir
+    completed_at = (Get-Date).ToString('s')
+    payload = `$payload
+  }
+}
+catch {
+  Write-JobJson -Path `$errorPath -Payload @{
+    ok = `$false
+    status = 'failed'
+    job_id = '$jobId'
+    tema = `$tema
+    stop_after_planning = `$stopAfterPlanning
+    output_dir = `$outputDir
+    failed_at = (Get-Date).ToString('s')
+    error = `$_.Exception.Message
+  }
+  exit 1
+}
+"@
+
+  Set-Content -Path $workerScriptPath -Value $workerContent -Encoding UTF8
+
+  Start-Process -FilePath $powerShellExe -ArgumentList @(
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
-    "-File", $orchestratorScript,
-    "-Tema", $Tema,
-    "-OutputDir", $outputDir
-  )
-  if ($StopAfterPlanning) {
-    $args += "-StopAfterPlanning"
+    "-File", $workerScriptPath
+  ) -WorkingDirectory (Get-WorkspaceRoot) | Out-Null
+
+  return @{
+    ok = $true
+    status = "queued"
+    job_id = $jobId
+    tema = $Tema
+    stop_after_planning = $StopAfterPlanning
+    output_dir = $outputDir
   }
+}
 
-  $powerShellExe = Get-PowerShellExecutable
-  $raw = & $powerShellExe @args 2>&1
-  $text = (($raw | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine).Trim()
+function Get-QueryParameters {
+  param([Parameter(Mandatory = $true)][string]$Path)
 
-  if ($LASTEXITCODE -ne 0) {
-    throw "Falha ao executar o article-orchestrator. Saida: $text"
-  }
+  $parts = $Path.Split('?', 2)
+  $route = $parts[0]
+  $query = @{}
 
-  $publishPackagePath = Join-Path $outputDir "13-publish-package.json"
-  $planningPath = Join-Path $outputDir "06-article-plan.json"
-
-  if (-not $StopAfterPlanning -and (Test-Path $publishPackagePath)) {
-    return @{
-      mode = "full"
-      output_dir = $outputDir
-      result = (Get-Content -Raw -Encoding UTF8 $publishPackagePath | ConvertFrom-Json)
+  if ($parts.Length -gt 1 -and -not [string]::IsNullOrWhiteSpace($parts[1])) {
+    foreach ($pair in $parts[1].Split('&')) {
+      if ([string]::IsNullOrWhiteSpace($pair)) { continue }
+      $kv = $pair.Split('=', 2)
+      $key = [System.Uri]::UnescapeDataString($kv[0])
+      $value = if ($kv.Length -gt 1) { [System.Uri]::UnescapeDataString($kv[1]) } else { "" }
+      $query[$key] = $value
     }
   }
 
-  if ($StopAfterPlanning -and (Test-Path $planningPath)) {
-    return @{
-      mode = "planning"
-      output_dir = $outputDir
-      research_pack = (Get-Content -Raw -Encoding UTF8 (Join-Path $outputDir "01-research-pack.json") | ConvertFrom-Json)
-      topic_validation = (Get-Content -Raw -Encoding UTF8 (Join-Path $outputDir "02-topic-validation.json") | ConvertFrom-Json)
-      approved_topic = (Get-Content -Raw -Encoding UTF8 (Join-Path $outputDir "03-approved-topic.json") | ConvertFrom-Json)
-      duplicate_check = (Get-Content -Raw -Encoding UTF8 (Join-Path $outputDir "04-duplicate-check.json") | ConvertFrom-Json)
-      course_match = (Get-Content -Raw -Encoding UTF8 (Join-Path $outputDir "05-course-match.json") | ConvertFrom-Json)
-      article_plan = (Get-Content -Raw -Encoding UTF8 $planningPath | ConvertFrom-Json)
-    }
+  return @{
+    route = $route
+    query = $query
   }
-
-  if (-not [string]::IsNullOrWhiteSpace($text)) {
-    try {
-      return @{
-        mode = if ($StopAfterPlanning) { "planning" } else { "full" }
-        output_dir = $outputDir
-        result = ($text | ConvertFrom-Json)
-      }
-    }
-    catch {
-    }
-  }
-
-  throw "Execucao concluida sem artefato esperado. Output dir: $outputDir"
 }
 
 $listener = [System.Net.Sockets.TcpListener]::Create($Port)
@@ -216,8 +409,11 @@ try {
 
     try {
       $request = Read-HttpRequest -Client $client
+      $pathInfo = Get-QueryParameters -Path $request.path
+      $route = $pathInfo.route
+      $query = $pathInfo.query
 
-      if ($request.method -eq "GET" -and $request.path -eq "/health") {
+      if ($request.method -eq "GET" -and $route -eq "/health") {
         Write-HttpJsonResponse -Stream $request.stream -StatusCode 200 -Payload @{
           ok = $true
           service = "article-orchestrator"
@@ -226,7 +422,7 @@ try {
         continue
       }
 
-      if ($request.method -eq "POST" -and $request.path -eq "/run-article") {
+      if ($request.method -eq "POST" -and $route -eq "/run-article") {
         $bodyText = [string]$request.body
         if ([string]::IsNullOrWhiteSpace($bodyText)) {
           throw "Body JSON obrigatorio."
@@ -240,8 +436,61 @@ try {
           throw "Campo 'tema' obrigatorio."
         }
 
-        $result = Invoke-OrchestratorRun -Tema $tema -StopAfterPlanning:$stopAfterPlanning
-        Write-HttpJsonResponse -Stream $request.stream -StatusCode 200 -Payload $result
+        $job = Start-OrchestratorJob -Tema $tema -StopAfterPlanning:$stopAfterPlanning
+        Write-HttpJsonResponse -Stream $request.stream -StatusCode 202 -Payload $job
+        continue
+      }
+
+      if ($request.method -eq "GET" -and $route -eq "/job-status") {
+        $jobId = [string]$query["id"]
+        if ([string]::IsNullOrWhiteSpace($jobId)) {
+          throw "Query param 'id' obrigatorio."
+        }
+
+        $state = Get-JobState -JobId $jobId
+        $payload = @{
+          ok = $state.ok
+          status = $state.status
+          job_id = $state.job_id
+          tema = $state.tema
+          stop_after_planning = $state.stop_after_planning
+          output_dir = $state.output_dir
+        }
+        if ($state.PSObject.Properties.Name -contains "error") {
+          $payload.error = $state.error
+        }
+        Write-HttpJsonResponse -Stream $request.stream -StatusCode 200 -Payload $payload
+        continue
+      }
+
+      if ($request.method -eq "GET" -and $route -eq "/job-result") {
+        $jobId = [string]$query["id"]
+        if ([string]::IsNullOrWhiteSpace($jobId)) {
+          throw "Query param 'id' obrigatorio."
+        }
+
+        $state = Get-JobState -JobId $jobId
+        if ($state.status -eq "completed") {
+          Write-HttpJsonResponse -Stream $request.stream -StatusCode 200 -Payload $state.payload
+          continue
+        }
+
+        if ($state.status -eq "failed") {
+          Write-HttpJsonResponse -Stream $request.stream -StatusCode 500 -Payload @{
+            ok = $false
+            status = "failed"
+            job_id = $state.job_id
+            error = $state.error
+          }
+          continue
+        }
+
+        Write-HttpJsonResponse -Stream $request.stream -StatusCode 200 -Payload @{
+          ok = $true
+          status = $state.status
+          job_id = $state.job_id
+          message = "Job ainda em execucao."
+        }
         continue
       }
 
