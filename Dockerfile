@@ -7,4 +7,4 @@ COPY . /app
 
 EXPOSE 8080
 
-CMD ["pwsh", "-NoProfile", "-File", "/app/server.ps1", "-Port", "8080"]
+CMD ["pwsh", "-NoProfile", "-Command", "$port = if ($env:PORT) { [int]$env:PORT } else { 8080 }; & /app/server.ps1 -Port $port"]

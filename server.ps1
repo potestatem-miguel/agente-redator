@@ -1,5 +1,5 @@
 param(
-  [int]$Port = 8080
+  [int]$Port = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -7,6 +7,16 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [Console]::InputEncoding = $Utf8NoBom
 [Console]::OutputEncoding = $Utf8NoBom
 $OutputEncoding = $Utf8NoBom
+
+if ($Port -le 0) {
+  $portFromEnv = [Environment]::GetEnvironmentVariable("PORT")
+  if (-not [string]::IsNullOrWhiteSpace($portFromEnv)) {
+    $Port = [int]$portFromEnv
+  }
+  else {
+    $Port = 8080
+  }
+}
 
 function Write-HttpJsonResponse {
   param(
