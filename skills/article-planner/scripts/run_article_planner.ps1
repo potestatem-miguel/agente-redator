@@ -34,7 +34,10 @@ function Get-OptionalEnv([string]$Name, [string]$Default = "") {
 }
 
 function Convert-TextToJsonObject {
-  param([string]$Text)
+  param(
+    [string]$Text,
+    [string]$Provider = ""
+  )
 
   $trimmed = [string]$Text
   if ([string]::IsNullOrWhiteSpace($trimmed)) {
@@ -71,7 +74,7 @@ Regras:
 Conteudo:
 $candidate
 "@
-        $repaired = Invoke-LlmJson -SystemPrompt "Voce corrige JSON invalido e retorna apenas JSON valido." -UserPrompt $repairPrompt -Model ""
+        $repaired = Invoke-LlmJson -SystemPrompt "Voce corrige JSON invalido e retorna apenas JSON valido." -UserPrompt $repairPrompt -Model "" -Provider $Provider
         return $repaired
       }
     }
@@ -83,10 +86,15 @@ function Invoke-LlmJson {
   param(
     [string]$SystemPrompt,
     [string]$UserPrompt,
-    [string]$Model = ""
+    [string]$Model = "",
+    [string]$Provider = ""
   )
 
-  $provider = (Get-OptionalEnv -Name "LLM_PROVIDER" -Default "anthropic").ToLowerInvariant()
+  $provider = if ([string]::IsNullOrWhiteSpace($Provider)) {
+    (Get-OptionalEnv -Name "LLM_PROVIDER" -Default "anthropic").ToLowerInvariant()
+  } else {
+    $Provider.ToLowerInvariant()
+  }
 
   if ($provider -eq "anthropic") {
     $apiKey = Get-RequiredEnv "ANTHROPIC_API_KEY"
@@ -117,7 +125,7 @@ function Invoke-LlmJson {
     $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
     $response = Invoke-RestMethod -Method Post -Uri "https://api.anthropic.com/v1/messages" -Headers $headers -Body $bytes -ContentType "application/json; charset=utf-8"
     $text = ((@($response.content) | Where-Object { $_.type -eq "text" } | ForEach-Object { $_.text }) -join "")
-    return (Convert-TextToJsonObject -Text $text)
+    return (Convert-TextToJsonObject -Text $text -Provider $provider)
   }
 
   $apiKey = Get-RequiredEnv "OPENAI_API_KEY"
@@ -155,6 +163,7 @@ $coursesJson = if ($courseMatch.courses) {
 
 $result = Invoke-LlmJson `
   -SystemPrompt "Voce e um especialista em SEO, AEO (Answer Engine Optimization) e GEO (Generative Engine Optimization) com 20+ anos de experiencia. Gere um PLANEJAMENTO DE ARTIGO em um UNICO JSON, seguindo rigorosamente o esquema e a ordem solicitada. Nao explique e nao adicione comentarios fora do JSON." `
+  -Provider "anthropic" `
   -UserPrompt @"
 ## Dados de entrada
 - Titulo do artigo: $($approvedTopic.titulo)
