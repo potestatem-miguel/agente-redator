@@ -1,0 +1,3 @@
+interface:
+  display_name: "Article Finisher"
+  short_description: "Fecha o artigo final e revisa consistencia global"

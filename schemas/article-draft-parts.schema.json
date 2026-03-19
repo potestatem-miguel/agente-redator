@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "article_draft_parts",
+  "type": "object",
+  "required": ["writer_id", "html"],
+  "properties": {
+    "writer_id": { "type": "string" },
+    "html": { "type": "string" }
+  }
+}

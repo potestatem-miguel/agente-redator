@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "image_package",
+  "type": "object",
+  "required": ["title", "nome_arquivo", "alt_text", "caption", "prompt_imagem"],
+  "properties": {
+    "title": { "type": "string" },
+    "nome_arquivo": { "type": "string" },
+    "alt_text": { "type": "string" },
+    "caption": { "type": "string" },
+    "prompt_imagem": { "type": "string" },
+    "negative_prompt": { "type": ["string", "null"] },
+    "aspect_ratio": { "type": ["string", "null"] },
+    "featured_image_notes": { "type": ["string", "null"] }
+  }
+}

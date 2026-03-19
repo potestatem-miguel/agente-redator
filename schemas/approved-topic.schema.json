@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "approved_topic",
+  "type": "object",
+  "required": ["tema_original", "titulo", "slug", "palavra_chave", "canonical_topic"],
+  "properties": {
+    "tema_original": { "type": "string" },
+    "titulo": { "type": "string" },
+    "slug": { "type": "string" },
+    "palavra_chave": { "type": "string" },
+    "canonical_topic": { "type": "string" },
+    "angulo_editorial": { "type": ["string", "null"] }
+  }
+}

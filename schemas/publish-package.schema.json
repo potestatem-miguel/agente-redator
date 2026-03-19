@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "publish_package",
+  "type": "object",
+  "required": ["ready_to_publish", "wordpress", "database", "media", "telemetry", "errors"],
+  "properties": {
+    "ready_to_publish": { "type": "boolean" },
+    "wordpress": { "type": "object" },
+    "database": { "type": "object" },
+    "media": { "type": "object" },
+    "telemetry": { "type": "object" },
+    "errors": { "type": "array", "items": { "type": "string" } }
+  }
+}

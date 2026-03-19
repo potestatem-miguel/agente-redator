@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "topic_validation",
+  "type": "object",
+  "required": ["decision", "reasoning", "scores"],
+  "properties": {
+    "decision": { "type": "string", "enum": ["approved", "refine", "rejected"] },
+    "reasoning": { "type": "array", "items": { "type": "string" } },
+    "scores": {
+      "type": "object",
+      "required": ["aderencia_publico", "utilidade_pratica", "potencial_busca", "perenidade"],
+      "properties": {
+        "aderencia_publico": { "type": "number" },
+        "utilidade_pratica": { "type": "number" },
+        "potencial_busca": { "type": "number" },
+        "perenidade": { "type": "number" }
+      }
+    },
+    "refined_angle": { "type": ["string", "null"] }
+  }
+}

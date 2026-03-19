@@ -1,0 +1,3 @@
+interface:
+  display_name: "Duplicate Check"
+  short_description: "Consulta o Supabase e valida duplicidade exata e semantica"

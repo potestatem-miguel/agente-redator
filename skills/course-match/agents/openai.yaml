@@ -1,0 +1,3 @@
+interface:
+  display_name: "Course Match"
+  short_description: "Consulta o Supabase e seleciona cursos do Educamundo"

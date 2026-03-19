@@ -1,0 +1,3 @@
+interface:
+  display_name: "Article Writer"
+  short_description: "Escreve blocos do artigo a partir do planejamento"

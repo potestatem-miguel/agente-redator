@@ -1,0 +1,3 @@
+interface:
+  display_name: "SEO Title Slug"
+  short_description: "Chama OpenAI para gerar titulo, slug e palavra-chave final"

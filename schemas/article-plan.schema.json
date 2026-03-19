@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "article_plan",
+  "type": "object",
+  "required": ["meta", "h1", "blocos", "faq", "imagens_sugeridas", "links_internos", "cursos_relacionados", "links_externos", "ctas"],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["titulo", "slug", "palavra_chave", "meta_title", "meta_description"],
+      "properties": {
+        "titulo": { "type": "string" },
+        "slug": { "type": "string" },
+        "palavra_chave": { "type": "string" },
+        "meta_title": { "type": "string" },
+        "meta_description": { "type": "string" }
+      }
+    },
+    "h1": { "type": "string" },
+    "blocos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id_bloco", "nivel", "titulo", "conteudo_brief", "objetivo_seo", "kw_alvo", "estimativa_palavras", "parent_id"],
+        "properties": {
+          "id_bloco": { "type": "string" },
+          "nivel": { "type": "string", "enum": ["H2", "H3"] },
+          "titulo": { "type": "string" },
+          "conteudo_brief": { "type": "string" },
+          "objetivo_seo": { "type": "array", "items": { "type": "string" } },
+          "kw_alvo": { "type": "array", "items": { "type": "string" } },
+          "estimativa_palavras": { "type": "number" },
+          "parent_id": { "type": "string" }
+        }
+      }
+    },
+    "faq": { "type": "array", "items": { "type": "object", "properties": { "pergunta": { "type": "string" }, "resposta_curta": { "type": "string" } } } },
+    "imagens_sugeridas": { "type": "array", "items": { "type": "object", "properties": { "descricao": { "type": "string" }, "alt_text": { "type": "string" } } } },
+    "links_internos": { "type": "array" },
+    "cursos_relacionados": { "type": "array" },
+    "links_externos": { "type": "array" },
+    "ctas": { "type": "array", "items": { "type": "string" } }
+  }
+}

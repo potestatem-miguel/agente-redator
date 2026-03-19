@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "research_pack",
+  "type": "object",
+  "required": ["status", "tema", "seed_keyword", "candidate_queries", "people_also_ask", "related_searches", "organic_highlights", "search_intent_summary", "snippet_opportunities", "missing_sources"],
+  "properties": {
+    "status": { "type": "string", "enum": ["ok", "partial", "needs_clarification"] },
+    "tema": { "type": "string" },
+    "seed_keyword": { "type": "string" },
+    "candidate_queries": { "type": "array", "items": { "type": "object", "required": ["query", "intent"], "properties": { "query": { "type": "string" }, "intent": { "type": "string" }, "source": { "type": "string" } } } },
+    "people_also_ask": { "type": "array", "items": { "type": "object", "required": ["question"], "properties": { "question": { "type": "string" }, "snippet": { "type": ["string", "null"] } } } },
+    "related_searches": { "type": "array", "items": { "type": "string" } },
+    "organic_highlights": { "type": "array", "items": { "type": "object", "properties": { "title": { "type": "string" }, "snippet": { "type": ["string", "null"] }, "url": { "type": ["string", "null"] } } } },
+    "search_intent_summary": { "type": "string" },
+    "snippet_opportunities": { "type": "array", "items": { "type": "string" } },
+    "ambiguidades": { "type": "array", "items": { "type": "string" } },
+    "missing_sources": { "type": "array", "items": { "type": "string" } }
+  }
+}

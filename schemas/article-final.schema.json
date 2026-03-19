@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "article_final",
+  "type": "object",
+  "required": ["meta", "h1", "introducao", "corpo_html", "faq_html", "conclusao", "categoria"],
+  "properties": {
+    "meta": { "type": "object" },
+    "h1": { "type": "string" },
+    "introducao": { "type": "string" },
+    "corpo_html": { "type": "string" },
+    "faq_html": { "type": "string" },
+    "conclusao": { "type": "string" },
+    "categoria": { "type": "string" },
+    "revision_notes": { "type": "array", "items": { "type": "string" } }
+  }
+}

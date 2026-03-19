@@ -1,0 +1,3 @@
+interface:
+  display_name: "Article Planner"
+  short_description: "Chama OpenAI para gerar o planejamento mestre do artigo"

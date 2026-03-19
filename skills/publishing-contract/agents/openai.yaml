@@ -1,0 +1,3 @@
+interface:
+  display_name: "Publishing Contract"
+  short_description: "Normaliza o payload final para WordPress e banco"

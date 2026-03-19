@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "duplicate_check",
+  "type": "object",
+  "required": ["status", "exact_match", "semantic_match", "recommended_action"],
+  "properties": {
+    "status": { "type": "string", "enum": ["unique", "related", "duplicate_exact", "duplicate_semantic"] },
+    "exact_match": {
+      "type": ["object", "null"],
+      "properties": {
+        "slug": { "type": "string" },
+        "found": { "type": "boolean" }
+      }
+    },
+    "semantic_match": {
+      "type": ["object", "null"],
+      "properties": {
+        "wp_id": { "type": ["number", "null"] },
+        "title": { "type": ["string", "null"] },
+        "score": { "type": ["number", "null"] }
+      }
+    },
+    "recommended_action": { "type": "string" },
+    "alternative_angle": { "type": ["string", "null"] },
+    "top_k": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "wp_id": { "type": ["number", "null"] },
+          "title": { "type": ["string", "null"] },
+          "score": { "type": ["number", "null"] }
+        }
+      }
+    },
+    "debug": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "keyword": { "type": ["string", "null"] },
+        "min_related": { "type": "number" },
+        "min_duplicate": { "type": "number" }
+      }
+    },
+    "error": { "type": ["string", "null"] }
+  }
+}
