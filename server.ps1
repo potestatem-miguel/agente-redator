@@ -57,6 +57,28 @@ function Get-PowerShellExecutable {
   throw "Nenhum executavel PowerShell encontrado. Instale pwsh ou powershell no ambiente."
 }
 
+function Convert-ToBoolean {
+  param($Value)
+
+  if ($Value -is [bool]) { return $Value }
+  if ($null -eq $Value) { return $false }
+
+  $text = ([string]$Value).Trim().ToLowerInvariant()
+  switch ($text) {
+    "true" { return $true }
+    "1" { return $true }
+    "yes" { return $true }
+    "sim" { return $true }
+    "false" { return $false }
+    "0" { return $false }
+    "no" { return $false }
+    "nao" { return $false }
+    "não" { return $false }
+    "" { return $false }
+    default { throw "Valor invalido para stop_after_planning: '$Value'" }
+  }
+}
+
 function Read-HttpRequest {
   param([Parameter(Mandatory = $true)][System.Net.Sockets.TcpClient]$Client)
 
@@ -212,7 +234,7 @@ try {
 
         $body = $bodyText | ConvertFrom-Json
         $tema = [string]$body.tema
-        $stopAfterPlanning = [bool]$body.stop_after_planning
+        $stopAfterPlanning = Convert-ToBoolean -Value $body.stop_after_planning
 
         if ([string]::IsNullOrWhiteSpace($tema)) {
           throw "Campo 'tema' obrigatorio."
