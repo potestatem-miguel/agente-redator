@@ -17,9 +17,15 @@ Body JSON:
 }
 ```
 
-Resposta:
-- `mode = "planning"` quando `stop_after_planning = true`
-- `mode = "full"` quando a execucao completa chega ao `publish-package.json`
+Resposta imediata:
+- `status = "queued"`
+- `job_id = "..."`
+
+### `GET /job-status?id=...`
+Consulta o status do job.
+
+### `GET /job-result?id=...`
+Retorna o resultado final quando o job estiver concluido.
 
 ## Variaveis de ambiente
 
@@ -30,9 +36,25 @@ Use o arquivo `.env.example` como base:
 - `SUPABASE_ANON_KEY`
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
-- `LLM_PROVIDER`
 - `ANTHROPIC_MODEL`
 - `OPENAI_MODEL`
+
+## Provedores por etapa
+
+O fluxo atual usa modelo hibrido:
+
+- OpenAI:
+  - `topic-validation`
+  - `seo-title-slug`
+  - `distribuidor`
+  - `image-package`
+- Anthropic:
+  - `article-planner`
+  - `repair-article-plan`
+  - `writer 1`
+  - `writer 2`
+  - `writer 3`
+  - `writer final`
 
 ## Rodar localmente
 
@@ -59,6 +81,13 @@ Invoke-RestMethod `
   -Body $body
 ```
 
+Depois:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri "http://localhost:8080/job-status?id=SEU_JOB_ID"
+Invoke-RestMethod -Method Get -Uri "http://localhost:8080/job-result?id=SEU_JOB_ID"
+```
+
 ## Deploy no EasyPanel
 
 1. Suba este projeto para um repositorio no GitHub.
@@ -72,7 +101,7 @@ Invoke-RestMethod `
 
 ### Planejamento apenas
 
-POST para `/run-article`:
+1. POST para `/run-article`:
 
 ```json
 {
@@ -81,9 +110,12 @@ POST para `/run-article`:
 }
 ```
 
+2. Consultar `/job-status?id=...`
+3. Buscar `/job-result?id=...`
+
 ### Artigo completo
 
-POST para `/run-article`:
+1. POST para `/run-article`:
 
 ```json
 {
@@ -92,7 +124,10 @@ POST para `/run-article`:
 }
 ```
 
-O n8n deve consumir o campo:
+2. Consultar `/job-status?id=...`
+3. Buscar `/job-result?id=...`
+
+No resultado final, o n8n deve consumir:
 
 - `result.wordpress` para publicar no WordPress
 - `result.media.image_package` para gerar e enviar imagem
