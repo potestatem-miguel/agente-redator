@@ -115,7 +115,10 @@ function Invoke-OrchestratorRun {
     [bool]$StopAfterPlanning = $false
   )
 
-  $workspaceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+  $workspaceRoot = $PSScriptRoot
+  if ([string]::IsNullOrWhiteSpace($workspaceRoot)) {
+    throw "Nao foi possivel resolver o diretorio raiz da aplicacao."
+  }
   $orchestratorScript = Join-Path $workspaceRoot "agents\article-orchestrator\scripts\run_article_orchestrator.ps1"
   $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
   $safeTema = (($Tema -replace '[^a-zA-Z0-9_-]+', '-') -replace '-{2,}', '-').Trim('-')
