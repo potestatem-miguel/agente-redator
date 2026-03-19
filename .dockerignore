@@ -1,0 +1,6 @@
+.git
+.gitignore
+test-output
+*.log
+*.tmp
+*.bak

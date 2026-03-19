@@ -1,0 +1,6 @@
+.env
+.env.local
+test-output/
+*.log
+*.tmp
+*.bak
